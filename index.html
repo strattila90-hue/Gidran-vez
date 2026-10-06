@@ -1,0 +1,636 @@
+<title>Gidrán Terepfutás</title>
+<style>
+/* szándékosan egységes, sötét olívzöld műszerfal-stílus — mint egy valódi harcjármű
+   kezelőpaneljének kijelzője, nem követi az OS világos/sötét témáját */
+:root{
+  --bg:#1b1f16;
+  --panel:#23281c;
+  --panel-line:#3a4530;
+  --fg:#e9ecd8;
+  --muted:#9aa386;
+  --accent:#c7d94a;
+  --danger:#d9572c;
+  --ok:#6fae4a;
+  --font-display:"Black Ops One",sans-serif;
+  --font-body:"IBM Plex Sans",-apple-system,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);}
+.page{max-width:980px;margin:0 auto;padding-block:28px 44px;padding-inline:16px;}
+h1{
+  font-family:var(--font-display);font-weight:400;
+  font-size:clamp(24px,4.4vw,34px);letter-spacing:0.02em;
+  margin:0 0 4px;text-wrap:balance;color:var(--accent);
+  text-shadow:0 2px 0 #00000055;
+}
+.subtitle{color:var(--muted);font-size:14px;margin:0 0 18px;max-width:640px;line-height:1.5;}
+
+.game-frame{
+  position:relative;
+  background:#000;
+  border:3px solid var(--panel-line);
+  border-radius:8px;
+  overflow:hidden;
+  box-shadow:0 10px 30px -12px #000a, inset 0 0 0 1px #0006;
+}
+canvas{display:block;width:100%;height:480px;}
+
+.hud-top{
+  position:absolute;top:0;left:0;right:0;
+  display:flex;justify-content:space-between;gap:10px;
+  padding:10px 12px;pointer-events:none;
+}
+.hud-chip{
+  background:#10140bcc;border:1px solid var(--panel-line);border-radius:6px;
+  padding:6px 10px;font-family:var(--font-mono);font-size:11.5px;color:var(--muted);
+  line-height:1.3;min-width:86px;
+}
+.hud-chip b{
+  display:block;font-size:19px;color:var(--accent);font-weight:600;
+  font-variant-numeric:tabular-nums;
+}
+.fuel-bar{
+  width:84px;height:7px;border-radius:4px;background:#0006;overflow:hidden;margin-top:4px;
+  border:1px solid var(--panel-line);
+}
+.fuel-fill{height:100%;background:var(--ok);width:100%;transition:background-color .3s;}
+
+.restart-mini{
+  pointer-events:auto;
+  background:#10140bcc;border:1px solid var(--panel-line);border-radius:6px;
+  color:var(--fg);font-family:var(--font-mono);font-size:12px;
+  padding:6px 10px;cursor:pointer;
+}
+.restart-mini:hover{background:#1b2112;}
+
+.touch-controls{
+  position:absolute;bottom:0;left:0;right:0;
+  display:flex;justify-content:space-between;
+  padding:14px;pointer-events:none;
+}
+.btn-pad{
+  pointer-events:auto;
+  width:84px;height:84px;border-radius:50%;
+  border:3px solid #0005;
+  font-family:var(--font-display);font-size:13px;color:#10140b;
+  display:flex;align-items:center;justify-content:center;
+  -webkit-user-select:none;user-select:none;touch-action:none;
+  box-shadow:0 6px 0 #0004, inset 0 2px 6px #fff3;
+}
+.btn-pad.brake{background:var(--danger);}
+.btn-pad.gas{background:var(--accent);}
+.btn-pad.active{transform:translateY(4px);box-shadow:0 2px 0 #0004, inset 0 2px 6px #0003;}
+
+.overlay{
+  position:absolute;inset:0;
+  background:#0b0d08cc;
+  display:flex;align-items:center;justify-content:center;
+  text-align:center;flex-direction:column;gap:12px;padding:20px;
+}
+.overlay[hidden]{display:none;}
+.overlay h2{
+  font-family:var(--font-display);font-size:clamp(20px,5vw,30px);color:var(--accent);margin:0;
+}
+.overlay p{color:var(--muted);font-size:13.5px;max-width:420px;margin:0;line-height:1.5;}
+.overlay .big-dist{
+  font-family:var(--font-mono);font-size:34px;color:var(--fg);font-weight:600;
+  font-variant-numeric:tabular-nums;
+}
+.go-btn{
+  font-family:var(--font-display);font-size:14px;color:#10140b;background:var(--accent);
+  border:none;border-radius:6px;padding:10px 22px;cursor:pointer;margin-top:4px;
+}
+.go-btn:hover{filter:brightness(1.08);}
+
+.legend{
+  margin-top:16px;font-family:var(--font-mono);font-size:12px;color:var(--muted);
+  display:flex;gap:18px;flex-wrap:wrap;
+}
+.legend b{color:var(--fg);}
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<div class="page">
+  <h1>GIDRÁN TEREPFUTÁS</h1>
+  <p class="subtitle">Gáz és fék csak — a cél, hogy minél messzebb eljuss anélkül, hogy felborulnál vagy kifogyna az üzemanyag. Levegőben a gáz/fék dönti a jármű orrát.</p>
+
+  <div class="game-frame">
+    <canvas id="game"></canvas>
+
+    <div class="hud-top">
+      <div style="display:flex;gap:8px;">
+        <div class="hud-chip">TÁV&#160;(m)<b id="hudDist">0</b></div>
+        <div class="hud-chip">SEBESSÉG<b id="hudSpeed">0</b></div>
+        <div class="hud-chip">ÜZEMANYAG<div class="fuel-bar"><div class="fuel-fill" id="fuelFill"></div></div></div>
+      </div>
+      <button class="restart-mini" id="restartMini">&#8635;&#160;Újra</button>
+    </div>
+
+    <div class="touch-controls">
+      <div class="btn-pad brake" id="btnBrake">FÉK</div>
+      <div class="btn-pad gas" id="btnGas">GÁZ</div>
+    </div>
+
+    <div class="overlay" id="startOverlay">
+      <h2>GIDRÁN TEREPFUTÁS</h2>
+      <p>Nyomd a GÁZT (jobb nyíl / szóköz / GÁZ gomb) az elinduláshoz. FÉK a lassításhoz vagy hátrálláshoz (bal nyíl / FÉK gomb).</p>
+      <button class="go-btn" id="startBtn">Indítás</button>
+    </div>
+
+    <div class="overlay" id="endOverlay" hidden>
+      <h2 id="endTitle">BECSAPÓDÁS</h2>
+      <div class="big-dist"><span id="endDist">0</span>&#160;m</div>
+      <p id="endBest">Legjobb táv: 0 m</p>
+      <button class="go-btn" id="restartBtn">Újrapróbálkozás</button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><b>Gáz:</b> jobb nyíl&#8201;/&#8201;szóköz</span>
+    <span><b>Fék&#8201;/&#8201;hátra:</b> bal nyíl</span>
+    <span><b>Levegőben:</b> gáz&#160;=&#160;orr fel, fék&#160;=&#160;orr le</span>
+  </div>
+</div>
+
+<script>
+(function(){
+
+  var canvas = document.getElementById("game");
+  var ctx = canvas.getContext("2d");
+
+  function resize(){
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    if(w < 1 || h < 1) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+
+  // ---------------- Terep ----------------
+  function groundY(x){
+    return 360
+      + Math.sin(x*0.0035)*90
+      + Math.sin(x*0.011 + 1.7)*40
+      + Math.sin(x*0.027 + 0.4)*16;
+  }
+
+  // ---------------- Fizikai állandók ----------------
+  var WHEEL_R = 24, WHEELBASE = 150, HULL_LIFT = 46;
+  var GRAVITY = 1600;
+  var ENGINE_ACCEL = 720, BRAKE_ACCEL = 700;
+  var AIR_TORQUE = 1500;
+  var CRASH_ANGLE = 1.35;
+  var MAX_FUEL = 100;
+  var FUEL_DRAIN = 2.0, FUEL_DRAIN_GAS = 3.0;
+  var BEST_KEY = "gidran-hillclimb-best";
+
+  // ---------------- Állapot ----------------
+  var state = "ready"; // ready | playing | crashed | outoffuel
+  var front, rear, wheelSpinF, wheelSpinR;
+  var camX, camY;
+  var distance = 0, fuel = MAX_FUEL;
+  var pickups = [], lastPickupX = 0;
+  var gasHeld = false, brakeHeld = false;
+  var bestDist = 0;
+
+  try {
+    var saved = localStorage.getItem(BEST_KEY);
+    if(saved) bestDist = parseFloat(saved) || 0;
+  } catch(e){}
+
+  function resetRun(){
+    var startX = 0;
+    var gy = groundY(startX);
+    front = { x: startX + WHEELBASE/2, y: gy - WHEEL_R, vx:0, vy:0, grounded:true };
+    rear  = { x: startX - WHEELBASE/2, y: gy - WHEEL_R, vx:0, vy:0, grounded:true };
+    wheelSpinF = 0; wheelSpinR = 0;
+    camX = startX - 160; camY = (gy - WHEEL_R) - 260;
+    distance = 0; fuel = MAX_FUEL;
+    pickups = []; lastPickupX = startX + 900;
+    gasHeld = false; brakeHeld = false;
+    state = "ready";
+    document.getElementById("endOverlay").hidden = true;
+    document.getElementById("startOverlay").hidden = false;
+    updateFuelUI();
+  }
+
+  function startRun(){
+    document.getElementById("startOverlay").hidden = true;
+    state = "playing";
+  }
+
+  function endRun(reason){
+    if(state !== "playing") return;
+    state = reason; // "crashed" | "outoffuel"
+    var distM = Math.round(distance);
+    if(distM > bestDist){
+      bestDist = distM;
+      try { localStorage.setItem(BEST_KEY, String(bestDist)); } catch(e){}
+    }
+    document.getElementById("endTitle").textContent = reason === "crashed" ? "BECSAPÓDÁS" : "KIFOGYOTT AZ ÜZEMANYAG";
+    document.getElementById("endDist").textContent = distM;
+    document.getElementById("endBest").textContent = "Legjobb táv: " + Math.round(bestDist) + " m";
+    document.getElementById("endOverlay").hidden = false;
+  }
+
+  function updateFuelUI(){
+    var pct = Math.max(0, fuel / MAX_FUEL * 100);
+    var fill = document.getElementById("fuelFill");
+    fill.style.width = pct + "%";
+    fill.style.backgroundColor = pct < 20 ? "#d9572c" : (pct < 50 ? "#d9b02c" : "#6fae4a");
+  }
+
+  // ---------------- Vezérlés ----------------
+  window.addEventListener("keydown", function(e){
+    if(["ArrowRight","ArrowUp"," "].indexOf(e.key) !== -1){ gasHeld = true; if(state==="ready") startRun(); e.preventDefault(); }
+    if(["ArrowLeft","ArrowDown"].indexOf(e.key) !== -1){ brakeHeld = true; if(state==="ready") startRun(); e.preventDefault(); }
+  });
+  window.addEventListener("keyup", function(e){
+    if(["ArrowRight","ArrowUp"," "].indexOf(e.key) !== -1) gasHeld = false;
+    if(["ArrowLeft","ArrowDown"].indexOf(e.key) !== -1) brakeHeld = false;
+  });
+
+  function bindPad(el, setter){
+    var on = function(e){ e.preventDefault(); setter(true); el.classList.add("active"); if(state==="ready") startRun(); };
+    var off = function(e){ setter(false); el.classList.remove("active"); };
+    el.addEventListener("pointerdown", on);
+    el.addEventListener("pointerup", off);
+    el.addEventListener("pointercancel", off);
+    el.addEventListener("pointerleave", off);
+  }
+  bindPad(document.getElementById("btnGas"), function(v){ gasHeld = v; });
+  bindPad(document.getElementById("btnBrake"), function(v){ brakeHeld = v; });
+
+  document.getElementById("startBtn").addEventListener("click", startRun);
+  document.getElementById("restartBtn").addEventListener("click", resetRun);
+  document.getElementById("restartMini").addEventListener("click", resetRun);
+
+  // ---------------- Fizika lépés ----------------
+  function stepWheel(w, dt){
+    w.vy += GRAVITY * dt;
+    w.x += w.vx * dt;
+    w.y += w.vy * dt;
+
+    var gy = groundY(w.x);
+    if(w.y + WHEEL_R > gy){
+      w.y = gy - WHEEL_R;
+      if(w.vy > 0) w.vy = -w.vy * 0.12;
+      w.grounded = true;
+    } else {
+      w.grounded = false;
+    }
+  }
+
+  function applyRod(){
+    var dx = rear.x - front.x, dy = rear.y - front.y;
+    var dist = Math.sqrt(dx*dx + dy*dy) || 0.0001;
+    var diff = (dist - WHEELBASE) / dist;
+    var cx = dx * 0.5 * diff, cy = dy * 0.5 * diff;
+    front.x += cx; front.y += cy;
+    rear.x  -= cx; rear.y  -= cy;
+  }
+
+  function spawnPickupsAhead(){
+    while(lastPickupX < camX + 1400){
+      lastPickupX += 2600 + Math.random()*1500;
+      pickups.push({ x: lastPickupX, collected:false });
+    }
+    pickups = pickups.filter(function(p){ return p.x > camX - 700; });
+  }
+
+  function update(dt){
+    if(state !== "playing") return;
+
+    front.vx *= 0.992; rear.vx *= 0.992;
+
+    if(gasHeld){
+      if(front.grounded) front.vx += ENGINE_ACCEL*dt;
+      if(rear.grounded)  rear.vx  += ENGINE_ACCEL*dt;
+      if(!front.grounded && !rear.grounded){ rear.vy -= AIR_TORQUE*dt*0.3; front.vy += AIR_TORQUE*dt*0.3; }
+    }
+    if(brakeHeld){
+      if(front.grounded) front.vx -= BRAKE_ACCEL*dt;
+      if(rear.grounded)  rear.vx  -= BRAKE_ACCEL*dt;
+      if(!front.grounded && !rear.grounded){ rear.vy += AIR_TORQUE*dt*0.3; front.vy -= AIR_TORQUE*dt*0.3; }
+    }
+
+    stepWheel(front, dt);
+    stepWheel(rear, dt);
+    applyRod();
+
+    wheelSpinF += front.vx/WHEEL_R*dt;
+    wheelSpinR += rear.vx/WHEEL_R*dt;
+
+    var midX = (front.x+rear.x)/2, midY = (front.y+rear.y)/2;
+    var tAngle = Math.atan2(front.y-rear.y, front.x-rear.x);
+    var norm = Math.atan2(Math.sin(tAngle), Math.cos(tAngle));
+
+    distance = Math.max(distance, midX/8);
+    fuel -= dt * (FUEL_DRAIN + (gasHeld ? FUEL_DRAIN_GAS : 0));
+    fuel = Math.max(0, fuel);
+    updateFuelUI();
+
+    pickups.forEach(function(p){
+      if(!p.collected && Math.abs(midX-p.x) < 55){
+        p.collected = true;
+        fuel = Math.min(MAX_FUEL, fuel + 30);
+        updateFuelUI();
+      }
+    });
+    spawnPickupsAhead();
+
+    camX += (midX - 160 - camX) * Math.min(1, dt*3.2);
+    camY += (midY - 260 - camY) * Math.min(1, dt*3.2);
+
+    if(Math.abs(norm) > CRASH_ANGLE){ endRun("crashed"); }
+    if(fuel <= 0){ endRun("outoffuel"); }
+  }
+
+  // ---------------- Rajzolás ----------------
+  function worldToScreen(wx, wy){
+    return { x: wx - camX, y: wy - camY };
+  }
+
+  function drawSky(w, h){
+    var g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, "#7fa8c9");
+    g.addColorStop(1, "#cfe3ea");
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,w,h);
+  }
+
+  function drawTerrain(w, h){
+    ctx.beginPath();
+    var step = 10;
+    var first = true;
+    for(var sx=-step; sx<=w+step; sx+=step){
+      var wx = sx + camX;
+      var sy = groundY(wx) - camY;
+      if(first){ ctx.moveTo(sx, sy); first = false; } else { ctx.lineTo(sx, sy); }
+    }
+    ctx.lineTo(w+step, h);
+    ctx.lineTo(-step, h);
+    ctx.closePath();
+    ctx.fillStyle = "#6b5234";
+    ctx.fill();
+
+    ctx.beginPath();
+    first = true;
+    for(var sx2=-step; sx2<=w+step; sx2+=step){
+      var wx2 = sx2 + camX;
+      var sy2 = groundY(wx2) - camY;
+      if(first){ ctx.moveTo(sx2, sy2); first = false; } else { ctx.lineTo(sx2, sy2); }
+    }
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "#5c8a3f";
+    ctx.stroke();
+  }
+
+  function drawPickups(){
+    pickups.forEach(function(p){
+      if(p.collected) return;
+      var gy = groundY(p.x);
+      var s = worldToScreen(p.x, gy - 22);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.fillStyle = "#d9b02c";
+      ctx.fillRect(-9,-14,18,24);
+      ctx.fillStyle = "#1b1f16";
+      ctx.font = "10px 'IBM Plex Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("ÜA", 0, 3);
+      ctx.restore();
+    });
+  }
+
+  function drawWheel(wx, wy, spin){
+    var s = worldToScreen(wx, wy);
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(spin);
+    // gumi + terepmintás futófelület
+    ctx.beginPath();
+    ctx.arc(0,0,WHEEL_R,0,Math.PI*2);
+    ctx.fillStyle = "#15171a";
+    ctx.fill();
+    ctx.fillStyle = "#2b2e33";
+    for(var i=0;i<18;i++){
+      ctx.save();
+      ctx.rotate(i/18*Math.PI*2);
+      ctx.fillRect(WHEEL_R-5, -2.4, 5, 4.8);
+      ctx.restore();
+    }
+    // felni
+    ctx.beginPath();
+    ctx.arc(0,0,WHEEL_R*0.52,0,Math.PI*2);
+    ctx.fillStyle = "#8b9088";
+    ctx.fill();
+    ctx.strokeStyle = "#4b4f4a";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = "#4b4f4a";
+    for(var j=0;j<5;j++){
+      var a = j/5*Math.PI*2;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a)*WHEEL_R*0.3, Math.sin(a)*WHEEL_R*0.3, 1.8, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(0,0,3.2,0,Math.PI*2);
+    ctx.fillStyle = "#2c2f2c";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Gidrán oldalnézet – a kézikönyv oldalnézeti fotója alapján (szürke test,
+  // magas kabin, ékelt géptető, két ajtó, pótkerék hátul, tetőn fegyverállomás)
+  function hullPath(){
+    ctx.beginPath();
+    ctx.moveTo(-114, 6);
+    ctx.lineTo(-114,-66);
+    ctx.lineTo(-108,-69);
+    ctx.lineTo(  20,-69);
+    ctx.lineTo(  30,-60);
+    ctx.lineTo(  46,-38);
+    ctx.lineTo( 122,-30);
+    ctx.lineTo( 125, -4);
+    ctx.lineTo( 123, 12);
+    ctx.lineTo( 100, 12);
+    ctx.lineTo( -90, 12);
+    ctx.closePath();
+  }
+
+  function drawHull(){
+    var midX = (front.x+rear.x)/2, midY = (front.y+rear.y)/2;
+    var tangentAngle = Math.atan2(front.y-rear.y, front.x-rear.x);
+    var nx = Math.sin(tangentAngle), ny = -Math.cos(tangentAngle);
+    var cx = midX + nx*HULL_LIFT*0.4, cy = midY + ny*HULL_LIFT*0.4;
+    var sc = worldToScreen(cx, cy);
+    var AX = 18.4;
+
+    ctx.save();
+    ctx.translate(sc.x, sc.y);
+    ctx.rotate(tangentAngle);
+
+    var BASE="#8d9187", LIGHT="#a7aba1", DARK="#5e625a", LINE="#33362f", GLASS="#2a343a";
+
+    // antennák
+    ctx.strokeStyle = "#3d403a"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-70,-69); ctx.lineTo(-70,-102); ctx.stroke();
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-100,-69); ctx.lineTo(-104,-96); ctx.stroke();
+
+    // füstgránátvető csövek a tetőn
+    ctx.fillStyle = DARK;
+    for(var k=0;k<4;k++){
+      ctx.save();
+      ctx.translate(-96+k*10, -72);
+      ctx.rotate(-0.5);
+      ctx.fillRect(-2.5,-10,5,12);
+      ctx.restore();
+    }
+
+    // test
+    hullPath();
+    ctx.fillStyle = BASE; ctx.fill();
+    ctx.save();
+    hullPath(); ctx.clip();
+    // felső világosabb sáv (tető/géptető)
+    ctx.fillStyle = LIGHT;
+    ctx.fillRect(-120,-70,170,6);
+    ctx.fillRect(46,-40,80,5);
+    // alsó küszöb / üzemanyagtartály borítás
+    ctx.fillStyle = DARK;
+    ctx.fillRect(-120,2,250,10);
+    // kerékívek + kiszélesített sárvédők
+    [-75, 75].forEach(function(wx){
+      ctx.beginPath();
+      ctx.arc(wx, AX, 35, Math.PI, 0);
+      ctx.lineTo(wx+35, 60); ctx.lineTo(wx-35, 60);
+      ctx.closePath();
+      ctx.fillStyle = LIGHT; ctx.fill();
+      ctx.beginPath();
+      ctx.arc(wx, AX, 30, Math.PI, 0);
+      ctx.lineTo(wx+30, 60); ctx.lineTo(wx-30, 60);
+      ctx.closePath();
+      ctx.fillStyle = "#14160f"; ctx.fill();
+    });
+    ctx.restore();
+
+    // kontúr
+    hullPath();
+    ctx.strokeStyle = LINE; ctx.lineWidth = 2; ctx.stroke();
+
+    // két ajtó: keret, ablak, kilincs
+    ctx.strokeStyle = LINE; ctx.lineWidth = 1.3;
+    ctx.strokeRect(-44,-64,41,56);
+    ctx.strokeRect(  0,-64,40,56);
+    ctx.fillStyle = GLASS;
+    [[-38,-57],[ 6,-57]].forEach(function(p){
+      ctx.beginPath();
+      ctx.moveTo(p[0],p[1]); ctx.lineTo(p[0]+28,p[1]);
+      ctx.lineTo(p[0]+30,p[1]+14); ctx.lineTo(p[0]+2,p[1]+14);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+    ctx.fillStyle = DARK;
+    ctx.fillRect(-26,-32,8,3);   // kilincsek
+    ctx.fillRect( 18,-32,8,3);
+    ctx.beginPath(); ctx.arc(-14,-38,3.4,0,Math.PI*2); ctx.fill(); // tűzelőnyílás
+    ctx.beginPath(); ctx.arc( 30,-38,3.4,0,Math.PI*2); ctx.fill();
+
+    // oldalpanelek (csavarozott lapok)
+    ctx.strokeStyle = LINE; ctx.lineWidth = 1;
+    ctx.strokeRect(-100,-62,22,14);
+    ctx.strokeRect(-100,-30,16,16);   // belső kommunikációs csatlakozó
+
+    // üzemanyag-zárófedél
+    ctx.fillStyle = DARK;
+    ctx.fillRect(-10, 4, 8, 5);
+
+    // géptető: borda, tükör, fényszóró, hűtő
+    ctx.strokeStyle = LINE; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(60,-38); ctx.lineTo(60,-6); ctx.stroke();
+    ctx.fillStyle = DARK;
+    ctx.fillRect(92,-34,10,6);       // kipufogó/hűtőrés
+    ctx.fillStyle = "#c9c9b8";
+    ctx.beginPath(); ctx.arc(119,-26,3.6,0,Math.PI*2); ctx.fill(); // fényszóró
+    ctx.fillStyle = "#2a2d28";
+    ctx.fillRect(112,-12,12,18);     // rács
+    ctx.strokeStyle = "#555a50";
+    for(var g=0; g<4; g++){ ctx.beginPath(); ctx.moveTo(113,-9+g*5); ctx.lineTo(123,-9+g*5); ctx.stroke(); }
+    // visszapillantó
+    ctx.fillStyle = "#2a2d28";
+    ctx.beginPath(); ctx.ellipse(50,-52,3,8,0,0,Math.PI*2); ctx.fill();
+    ctx.lineWidth=1.5; ctx.strokeStyle="#2a2d28";
+    ctx.beginPath(); ctx.moveTo(48,-46); ctx.lineTo(42,-44); ctx.stroke();
+    // lökhárító + vontatólánc
+    ctx.fillStyle = "#2a2d28";
+    ctx.fillRect(112,6,14,6);
+    ctx.strokeStyle = "#2a2d28"; ctx.lineWidth = 2; ctx.setLineDash([3,2]);
+    ctx.beginPath(); ctx.moveTo(124,10); ctx.lineTo(125,30); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // pótkerék hátul (álló, a kocsi falán)
+    ctx.fillStyle = "#17191b";
+    ctx.beginPath(); ctx.ellipse(-124,-36,9,31,0,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#34383c"; ctx.lineWidth = 1.2;
+    for(var t=-4;t<=4;t++){ ctx.beginPath(); ctx.moveTo(-132,-36+t*6); ctx.lineTo(-117,-36+t*6); ctx.stroke(); }
+
+    // tető: távirányított fegyverállomás (előre néző csővel)
+    ctx.fillStyle = DARK;
+    ctx.fillRect(-26,-77,40,8);
+    ctx.fillStyle = BASE;
+    ctx.beginPath();
+    ctx.moveTo(-22,-77); ctx.lineTo(-22,-96); ctx.lineTo(0,-100);
+    ctx.lineTo(10,-92); ctx.lineTo(10,-77); ctx.closePath();
+    ctx.fill(); ctx.strokeStyle = LINE; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.strokeStyle = "#1a1c1a"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(8,-91); ctx.lineTo(50,-91); ctx.stroke();
+    ctx.fillStyle = GLASS;
+    ctx.beginPath(); ctx.arc(-12,-88,3,0,Math.PI*2); ctx.fill();
+    // radar/szenzor tál
+    ctx.fillStyle = "#3d403a";
+    ctx.fillRect(-60,-72,16,3);
+    ctx.fillRect(-54,-76,4,4);
+
+    ctx.restore();
+  }
+
+  function draw(){
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.clearRect(0,0,w,h);
+    drawSky(w,h);
+    drawTerrain(w,h);
+    drawPickups();
+    drawHull();
+    drawWheel(rear.x, rear.y, wheelSpinR);
+    drawWheel(front.x, front.y, wheelSpinF);
+
+    document.getElementById("hudDist").textContent = Math.round(distance);
+    var spd = Math.round(((front.vx+rear.vx)/2) / 100 * 10);
+    document.getElementById("hudSpeed").textContent = Math.max(0, spd);
+  }
+
+  // ---------------- Fő ciklus ----------------
+  var lastT = null;
+  function loop(t){
+    requestAnimationFrame(loop);
+    if(lastT === null) lastT = t;
+    var dt = Math.min(0.033, (t - lastT) / 1000);
+    lastT = t;
+    resize();
+    update(dt);
+    draw();
+  }
+
+  resetRun();
+  resize();
+  requestAnimationFrame(loop);
+
+})();
+</script>
